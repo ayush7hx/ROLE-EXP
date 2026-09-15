@@ -34,6 +34,8 @@ python bot.py
 
 Only owner ID `1255716509443948648` can use bot commands. Ticket members can use the **Close** button. Staff can use **Claim** and **Close**. A transcript file is sent to the configured ticket log channel before the ticket channel is deleted.
 
+Set `TICKET_PANEL_THUMBNAIL_URL` and `TICKET_PANEL_IMAGE_URL` in Render environment variables to add the panel logo and banner. Then run `*ticketpanel` again to post the custom panel.
+
 ## Render
 
 This repository is configured as a Render Web Service. Create a service from the repository, use the included `render.yaml`, and add `DISCORD_TOKEN` as a secret environment variable. Render's health check URL can be `/health`; the process keeps an HTTP server alive on `PORT` while the Discord client runs.

@@ -21,6 +21,8 @@ TOKEN = os.getenv("DISCORD_TOKEN", "").strip()
 PREFIX = "*"
 OWNER_ID = 1255716509443948648
 PORT = int(os.getenv("PORT", "10000"))
+TICKET_PANEL_THUMBNAIL_URL = os.getenv("TICKET_PANEL_THUMBNAIL_URL", "").strip()
+TICKET_PANEL_IMAGE_URL = os.getenv("TICKET_PANEL_IMAGE_URL", "").strip()
 DB_PATH = ROOT / "data.sqlite3"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -122,7 +124,7 @@ class TicketPanel(discord.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Open a ticket", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="role_exp:ticket_open")
+    @discord.ui.button(label="Open Ticket", style=discord.ButtonStyle.success, custom_id="role_exp:ticket_open")
     async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.guild is None or not isinstance(interaction.user, discord.Member):
             await interaction.response.send_message("Tickets can only be opened inside a server.", ephemeral=True)
@@ -330,8 +332,26 @@ async def ticketpanel(ctx: commands.Context) -> None:
     if config is None or not config["ticket_log_channel_id"]:
         await ctx.send("Run `*ticketconfig #ticket-logs @Staff` first.")
         return
-    embed = discord.Embed(title="Need help? Open a ticket", description="Press the button below to create a private support ticket. The support team will be notified and the full ticket transcript will be logged when it closes.", color=discord.Color.blurple())
-    embed.set_footer(text="One open ticket per member")
+    embed = discord.Embed(
+        title="Need Help? Open a Ticket!",
+        description=(
+            "🎫 **Need Assistance? We're Here to Help!**\n\n"
+            "Have a question, issue, or need support?\n"
+            "Simply open a ticket and our team will assist you as soon as possible.\n\n"
+            "📌 **Before Opening a Ticket:**\n"
+            "• Explain your issue clearly\n"
+            "• Provide screenshots/details if needed\n"
+            "• Please be patient while waiting for a response\n"
+            "• Do not spam or create multiple tickets for the same issue\n\n"
+            "💙 **Thank you for contacting our Support Team!**"
+        ),
+        color=discord.Color.red(),
+    )
+    if TICKET_PANEL_THUMBNAIL_URL:
+        embed.set_thumbnail(url=TICKET_PANEL_THUMBNAIL_URL)
+    if TICKET_PANEL_IMAGE_URL:
+        embed.set_image(url=TICKET_PANEL_IMAGE_URL)
+    embed.set_footer(text="🛠️ Staff will assist you shortly.")
     await ctx.send(embed=embed, view=TicketPanel())
 
 
