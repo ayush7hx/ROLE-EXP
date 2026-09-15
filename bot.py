@@ -21,8 +21,6 @@ TOKEN = os.getenv("DISCORD_TOKEN", "").strip()
 PREFIX = "*"
 OWNER_ID = 1255716509443948648
 PORT = int(os.getenv("PORT", "10000"))
-TICKET_PANEL_THUMBNAIL_URL = os.getenv("TICKET_PANEL_THUMBNAIL_URL", "").strip()
-TICKET_PANEL_IMAGE_URL = os.getenv("TICKET_PANEL_IMAGE_URL", "").strip()
 DB_PATH = ROOT / "data.sqlite3"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -325,13 +323,16 @@ async def ticketconfig(ctx: commands.Context, ticket_logs: discord.TextChannel, 
 
 @bot.command(name="ticketpanel")
 @commands.guild_only()
-async def ticketpanel(ctx: commands.Context) -> None:
+async def ticketpanel(ctx: commands.Context, thumbnail_url: str | None = None, image_url: str | None = None) -> None:
     if ctx.guild is None or not isinstance(ctx.channel, discord.TextChannel):
         return
     config = get_config(ctx.guild.id)
     if config is None or not config["ticket_log_channel_id"]:
         await ctx.send("Run `*ticketconfig #ticket-logs @Staff` first.")
         return
+    attachments = [attachment.url for attachment in ctx.message.attachments]
+    thumbnail_url = thumbnail_url or (attachments[0] if attachments else None)
+    image_url = image_url or (attachments[1] if len(attachments) > 1 else None)
     embed = discord.Embed(
         title="Need Help? Open a Ticket!",
         description=(
@@ -347,10 +348,10 @@ async def ticketpanel(ctx: commands.Context) -> None:
         ),
         color=discord.Color.red(),
     )
-    if TICKET_PANEL_THUMBNAIL_URL:
-        embed.set_thumbnail(url=TICKET_PANEL_THUMBNAIL_URL)
-    if TICKET_PANEL_IMAGE_URL:
-        embed.set_image(url=TICKET_PANEL_IMAGE_URL)
+    if thumbnail_url:
+        embed.set_thumbnail(url=thumbnail_url)
+    if image_url:
+        embed.set_image(url=image_url)
     embed.set_footer(text="🛠️ Staff will assist you shortly.")
     await ctx.send(embed=embed, view=TicketPanel())
 

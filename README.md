@@ -34,7 +34,13 @@ python bot.py
 
 Only owner ID `1255716509443948648` can use bot commands. Ticket members can use the **Close** button. Staff can use **Claim** and **Close**. A transcript file is sent to the configured ticket log channel before the ticket channel is deleted.
 
-Set `TICKET_PANEL_THUMBNAIL_URL` and `TICKET_PANEL_IMAGE_URL` in Render environment variables to add the panel logo and banner. Then run `*ticketpanel` again to post the custom panel.
+Customize the panel when posting it. Use URLs directly:
+
+```text
+*ticketpanel <logo-url> <banner-url>
+```
+
+You can also attach one image for the thumbnail, or two images in order: first attachment is the logo thumbnail and second attachment is the banner. Then run `*ticketpanel` again to post the custom panel.
 
 ## Render
 
