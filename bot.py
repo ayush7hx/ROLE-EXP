@@ -217,6 +217,7 @@ class RoleExp(commands.Bot):
         await self.tree.sync()
 
     async def on_ready(self) -> None:
+        await self.change_presence(status=discord.Status.dnd)
         log.info("Online as %s in %d guild(s)", self.user, len(self.guilds))
 
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
