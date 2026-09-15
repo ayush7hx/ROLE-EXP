@@ -283,6 +283,31 @@ async def send_ticket_log(guild: discord.Guild, title: str, actor: discord.Membe
 bot = RoleExp()
 
 
+rolelog = discord.app_commands.Group(name="rolelog", description="Configure manual role-change logs")
+
+
+@rolelog.command(name="set", description="Set the channel for human role add/remove logs")
+@discord.app_commands.describe(channel="Channel where role changes should be logged")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def rolelog_set(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
+    if interaction.guild is None:
+        return
+    save_config(interaction.guild.id, role_log_channel_id=channel.id)
+    await interaction.response.send_message(f"Manual role add/remove logs will be sent to {channel.mention}.", ephemeral=True)
+
+
+@rolelog.command(name="disable", description="Disable manual role-change logs")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def rolelog_disable(interaction: discord.Interaction) -> None:
+    if interaction.guild is None:
+        return
+    save_config(interaction.guild.id, role_log_channel_id=None)
+    await interaction.response.send_message("Manual role add/remove logs have been disabled.", ephemeral=True)
+
+
+bot.tree.add_command(rolelog)
+
+
 @bot.tree.command(name="ticketconfig", description="Configure ticket and role log channels")
 @discord.app_commands.describe(ticket_logs="Channel for ticket events and transcripts", role_logs="Channel for manual human role changes", staff_role="Optional role allowed to manage tickets")
 @discord.app_commands.checks.has_permissions(manage_guild=True)

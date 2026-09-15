@@ -25,6 +25,8 @@ python bot.py
 ## Commands
 
 - `/ticketconfig ticket_logs:#ticket-logs role_logs:#role-logs staff_role:@Staff` creates/configures the ticket category and log destinations.
+- `/rolelog set channel:#role-logs` configures only the manual role add/remove log channel.
+- `/rolelog disable` turns off manual role add/remove logs.
 - `/ticketpanel` posts the ticket embed panel in the current channel.
 - `/ticketclose` closes the current ticket (staff fallback).
 - `/ticketclaim` claims the current ticket; the ticket button is also available.
