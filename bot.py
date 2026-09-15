@@ -164,6 +164,44 @@ class TicketPanel(discord.ui.View):
         await send_ticket_log(interaction.guild, "Ticket opened", interaction.user, channel, discord.Color.green())
 
 
+class TicketPanelModal(discord.ui.Modal, title="Customize Ticket Panel"):
+    panel_title = discord.ui.TextInput(label="Title", placeholder="Need Help? Open a Ticket!", max_length=256)
+    panel_description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph, placeholder="Explain how members should open a ticket...", max_length=4000)
+    image_url = discord.ui.TextInput(label="Image URL", required=False, placeholder="https://example.com/banner.png", max_length=1000)
+    thumbnail_url = discord.ui.TextInput(label="Thumbnail URL", required=False, placeholder="https://example.com/logo.png", max_length=1000)
+    footer = discord.ui.TextInput(label="Footer", required=False, placeholder="Staff will assist you shortly.", max_length=2048)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != OWNER_ID or interaction.guild is None:
+            await interaction.response.send_message("Only the bot owner can customize the ticket panel.", ephemeral=True)
+            return
+        embed = discord.Embed(
+            title=str(self.panel_title),
+            description=str(self.panel_description),
+            color=discord.Color.red(),
+        )
+        if self.image_url.value.strip():
+            embed.set_image(url=self.image_url.value.strip())
+        if self.thumbnail_url.value.strip():
+            embed.set_thumbnail(url=self.thumbnail_url.value.strip())
+        if self.footer.value.strip():
+            embed.set_footer(text=self.footer.value.strip())
+        await interaction.channel.send(embed=embed, view=TicketPanel())
+        await interaction.response.send_message("Your custom ticket panel has been posted.", ephemeral=True)
+
+
+class CustomizeTicketPanelView(discord.ui.View):
+    def __init__(self) -> None:
+        super().__init__(timeout=300)
+
+    @discord.ui.button(label="Customize Ticket Panel", style=discord.ButtonStyle.primary, emoji="🎨")
+    async def customize(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != OWNER_ID:
+            await interaction.response.send_message("Only the bot owner can customize the ticket panel.", ephemeral=True)
+            return
+        await interaction.response.send_modal(TicketPanelModal())
+
+
 class TicketControls(discord.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
@@ -354,6 +392,12 @@ async def ticketpanel(ctx: commands.Context, thumbnail_url: str | None = None, i
         embed.set_image(url=image_url)
     embed.set_footer(text="🛠️ Staff will assist you shortly.")
     await ctx.send(embed=embed, view=TicketPanel())
+
+
+@bot.command(name="ticketcustomize")
+@commands.guild_only()
+async def ticketcustomize(ctx: commands.Context) -> None:
+    await ctx.send("Click below to design your ticket panel. The form lets you set the title, description, images, and footer.", view=CustomizeTicketPanelView())
 
 
 @bot.command(name="ticketclaim")

@@ -29,6 +29,7 @@ python bot.py
 - `*rolelogoff` turns off manual role add/remove logs.
 - `*ticketconfig #ticket-logs @Staff` configures the ticket system.
 - `*ticketpanel` posts the ticket embed panel in the current channel.
+- `*ticketcustomize` opens a Discord form for title, description, image URL, thumbnail URL, and footer, then posts the finished panel.
 - `*ticketclose` closes the current ticket (owner fallback).
 - `*ticketclaim` claims the current ticket; the ticket button is also available.
 
