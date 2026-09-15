@@ -310,14 +310,14 @@ async def rolelog_disable(ctx: commands.Context) -> None:
 
 @bot.command(name="ticketconfig")
 @commands.guild_only()
-async def ticketconfig(ctx: commands.Context, ticket_logs: discord.TextChannel, role_logs: discord.TextChannel, staff_role: discord.Role | None = None) -> None:
+async def ticketconfig(ctx: commands.Context, ticket_logs: discord.TextChannel, staff_role: discord.Role | None = None) -> None:
     if ctx.guild is None:
         return
     category = discord.utils.get(ctx.guild.categories, name="Tickets")
     if category is None:
         category = await ctx.guild.create_category("Tickets", reason="Configure ticket system")
-    save_config(ctx.guild.id, ticket_category_id=category.id, ticket_log_channel_id=ticket_logs.id, role_log_channel_id=role_logs.id, staff_role_id=staff_role.id if staff_role else None)
-    embed = discord.Embed(title="Configuration saved", description=f"Ticket category: {category.mention}\nTicket logs: {ticket_logs.mention}\nRole logs: {role_logs.mention}\nStaff role: {staff_role.mention if staff_role else 'Anyone with Manage Channels'}", color=discord.Color.green())
+    save_config(ctx.guild.id, ticket_category_id=category.id, ticket_log_channel_id=ticket_logs.id, staff_role_id=staff_role.id if staff_role else None)
+    embed = discord.Embed(title="Ticket configuration saved", description=f"Ticket category: {category.mention}\nTicket logs: {ticket_logs.mention}\nStaff role: {staff_role.mention if staff_role else 'Anyone with Manage Channels'}\n\nRole logs are configured separately with `*rolelog #role-logs`.", color=discord.Color.green())
     await ctx.send(embed=embed)
 
 
@@ -328,7 +328,7 @@ async def ticketpanel(ctx: commands.Context) -> None:
         return
     config = get_config(ctx.guild.id)
     if config is None or not config["ticket_log_channel_id"]:
-        await ctx.send("Run `*ticketconfig #ticket-logs #role-logs @Staff` first.")
+        await ctx.send("Run `*ticketconfig #ticket-logs @Staff` first.")
         return
     embed = discord.Embed(title="Need help? Open a ticket", description="Press the button below to create a private support ticket. The support team will be notified and the full ticket transcript will be logged when it closes.", color=discord.Color.blurple())
     embed.set_footer(text="One open ticket per member")
