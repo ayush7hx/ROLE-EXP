@@ -3,7 +3,7 @@
 A focused Discord bot with two features:
 
 1. Advanced private ticket system with embeds, a dedicated `Tickets` category, staff access, claim/close controls, and transcript logs.
-2. Role audit logging: every role added or removed from a member is logged with the target member, role, executor from Discord Audit Log, IDs, and UTC timestamp.
+2. Role audit logging: only a verified human manually adding or removing a role from another human member is logged with the target member, role, executor from Discord Audit Log, IDs, and UTC timestamp. Bot actions, autorole, onboarding, and unknown/system audit events are ignored.
 
 ## Discord setup
 
@@ -24,12 +24,12 @@ python bot.py
 
 ## Commands
 
-- `!ticketconfig #ticket-logs #role-logs @Staff` creates/configures the ticket category and log destinations.
-- `!ticketpanel` posts the ticket embed panel in the current channel.
-- `!ticketclose` closes the current ticket (staff fallback).
-- `!ticketclaim` is available as a command fallback; the ticket button is preferred.
+- `/ticketconfig ticket_logs:#ticket-logs role_logs:#role-logs staff_role:@Staff` creates/configures the ticket category and log destinations.
+- `/ticketpanel` posts the ticket embed panel in the current channel.
+- `/ticketclose` closes the current ticket (staff fallback).
+- `/ticketclaim` claims the current ticket; the ticket button is also available.
 
-Ticket members can use the **Close** button. Staff can use **Claim** and **Close**. A transcript file is sent to the configured ticket log channel before the ticket channel is deleted.
+Ticket members can use the **Close** button. Staff can use **Claim** and **Close**. A transcript file is sent to the configured ticket log channel before the ticket channel is deleted. Slash commands are synced globally when the bot starts.
 
 ## Render
 
