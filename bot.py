@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 TOKEN = os.getenv("DISCORD_TOKEN", "").strip()
+PREFIX = "*"
+OWNER_ID = 1255716509443948648
 PORT = int(os.getenv("PORT", "10000"))
 DB_PATH = ROOT / "data.sqlite3"
 
@@ -27,7 +29,7 @@ log = logging.getLogger("role-exp")
 intents = discord.Intents.default()
 intents.guilds = True
 intents.members = True
-intents.message_content = False
+intents.message_content = True
 
 
 def db_connect() -> sqlite3.Connection:
@@ -127,7 +129,7 @@ class TicketPanel(discord.ui.View):
             return
         config = get_config(interaction.guild.id)
         if config is None or not config["ticket_log_channel_id"]:
-            await interaction.response.send_message("Ticket system is not configured yet. Ask an administrator to run `/ticketconfig`.", ephemeral=True)
+            await interaction.response.send_message("Ticket system is not configured yet. Ask the owner to run `*ticketconfig`.", ephemeral=True)
             return
         existing = next((channel for channel in interaction.guild.text_channels if channel.topic == f"role-exp-ticket:{interaction.user.id}"), None)
         if existing:
@@ -207,14 +209,13 @@ class TicketControls(discord.ui.View):
 
 class RoleExp(commands.Bot):
     def __init__(self) -> None:
-        super().__init__(command_prefix=commands.when_mentioned, intents=intents, help_command=None)
+        super().__init__(command_prefix=PREFIX, intents=intents, help_command=None)
         self.role_log_locks: dict[int, asyncio.Lock] = {}
 
     async def setup_hook(self) -> None:
         init_db()
         self.add_view(TicketPanel())
         self.add_view(TicketControls())
-        await self.tree.sync()
 
     async def on_ready(self) -> None:
         await self.change_presence(status=discord.Status.dnd)
@@ -284,88 +285,101 @@ async def send_ticket_log(guild: discord.Guild, title: str, actor: discord.Membe
 bot = RoleExp()
 
 
-rolelog = discord.app_commands.Group(name="rolelog", description="Configure manual role-change logs")
+@bot.check
+async def owner_only(ctx: commands.Context) -> bool:
+    return ctx.author.id == OWNER_ID
 
 
-@rolelog.command(name="set", description="Set the channel for human role add/remove logs")
-@discord.app_commands.describe(channel="Channel where role changes should be logged")
-@discord.app_commands.checks.has_permissions(manage_guild=True)
-async def rolelog_set(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
-    if interaction.guild is None:
+@bot.command(name="rolelog")
+@commands.guild_only()
+async def rolelog_command(ctx: commands.Context, channel: discord.TextChannel) -> None:
+    if ctx.guild is None:
         return
-    save_config(interaction.guild.id, role_log_channel_id=channel.id)
-    await interaction.response.send_message(f"Manual role add/remove logs will be sent to {channel.mention}.", ephemeral=True)
+    save_config(ctx.guild.id, role_log_channel_id=channel.id)
+    await ctx.send(f"Manual role add/remove logs will be sent to {channel.mention}.")
 
 
-@rolelog.command(name="disable", description="Disable manual role-change logs")
-@discord.app_commands.checks.has_permissions(manage_guild=True)
-async def rolelog_disable(interaction: discord.Interaction) -> None:
-    if interaction.guild is None:
+@bot.command(name="rolelogoff")
+@commands.guild_only()
+async def rolelog_disable(ctx: commands.Context) -> None:
+    if ctx.guild is None:
         return
-    save_config(interaction.guild.id, role_log_channel_id=None)
-    await interaction.response.send_message("Manual role add/remove logs have been disabled.", ephemeral=True)
+    save_config(ctx.guild.id, role_log_channel_id=None)
+    await ctx.send("Manual role add/remove logs have been disabled.")
 
 
-bot.tree.add_command(rolelog)
-
-
-@bot.tree.command(name="ticketconfig", description="Configure ticket and role log channels")
-@discord.app_commands.describe(ticket_logs="Channel for ticket events and transcripts", role_logs="Channel for manual human role changes", staff_role="Optional role allowed to manage tickets")
-@discord.app_commands.checks.has_permissions(manage_guild=True)
-async def ticketconfig(interaction: discord.Interaction, ticket_logs: discord.TextChannel, role_logs: discord.TextChannel, staff_role: discord.Role | None = None) -> None:
-    if interaction.guild is None:
+@bot.command(name="ticketconfig")
+@commands.guild_only()
+async def ticketconfig(ctx: commands.Context, ticket_logs: discord.TextChannel, role_logs: discord.TextChannel, staff_role: discord.Role | None = None) -> None:
+    if ctx.guild is None:
         return
-    category = discord.utils.get(interaction.guild.categories, name="Tickets")
+    category = discord.utils.get(ctx.guild.categories, name="Tickets")
     if category is None:
-        category = await interaction.guild.create_category("Tickets", reason="Configure ticket system")
-    save_config(interaction.guild.id, ticket_category_id=category.id, ticket_log_channel_id=ticket_logs.id, role_log_channel_id=role_logs.id, staff_role_id=staff_role.id if staff_role else None)
+        category = await ctx.guild.create_category("Tickets", reason="Configure ticket system")
+    save_config(ctx.guild.id, ticket_category_id=category.id, ticket_log_channel_id=ticket_logs.id, role_log_channel_id=role_logs.id, staff_role_id=staff_role.id if staff_role else None)
     embed = discord.Embed(title="Configuration saved", description=f"Ticket category: {category.mention}\nTicket logs: {ticket_logs.mention}\nRole logs: {role_logs.mention}\nStaff role: {staff_role.mention if staff_role else 'Anyone with Manage Channels'}", color=discord.Color.green())
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await ctx.send(embed=embed)
 
 
-@bot.tree.command(name="ticketpanel", description="Post the ticket opening panel")
-@discord.app_commands.checks.has_permissions(manage_guild=True)
-async def ticketpanel(interaction: discord.Interaction) -> None:
-    if interaction.guild is None or not isinstance(interaction.channel, discord.TextChannel):
+@bot.command(name="ticketpanel")
+@commands.guild_only()
+async def ticketpanel(ctx: commands.Context) -> None:
+    if ctx.guild is None or not isinstance(ctx.channel, discord.TextChannel):
         return
-    config = get_config(interaction.guild.id)
+    config = get_config(ctx.guild.id)
     if config is None or not config["ticket_log_channel_id"]:
-        await interaction.response.send_message("Run `/ticketconfig` first.", ephemeral=True)
+        await ctx.send("Run `*ticketconfig #ticket-logs #role-logs @Staff` first.")
         return
     embed = discord.Embed(title="Need help? Open a ticket", description="Press the button below to create a private support ticket. The support team will be notified and the full ticket transcript will be logged when it closes.", color=discord.Color.blurple())
     embed.set_footer(text="One open ticket per member")
-    await interaction.response.send_message(embed=embed, view=TicketPanel())
+    await ctx.send(embed=embed, view=TicketPanel())
 
 
-@bot.tree.command(name="ticketclaim", description="Claim the current ticket")
-async def ticketclaim(interaction: discord.Interaction) -> None:
-    if interaction.guild is None or not isinstance(interaction.channel, discord.TextChannel) or not isinstance(interaction.user, discord.Member):
+@bot.command(name="ticketclaim")
+@commands.guild_only()
+async def ticketclaim(ctx: commands.Context) -> None:
+    if ctx.guild is None or not isinstance(ctx.channel, discord.TextChannel) or not isinstance(ctx.author, discord.Member):
         return
-    ticket = get_ticket(interaction.channel.id)
+    ticket = get_ticket(ctx.channel.id)
     if ticket is None:
-        await interaction.response.send_message("This channel is not a tracked ticket.", ephemeral=True)
+        await ctx.send("This channel is not a tracked ticket.")
         return
-    config = get_config(interaction.guild.id)
-    staff_role = interaction.guild.get_role(config["staff_role_id"]) if config and config["staff_role_id"] else None
-    if not (interaction.user.guild_permissions.manage_channels or (staff_role and staff_role in interaction.user.roles)):
-        await interaction.response.send_message("Only staff can claim tickets.", ephemeral=True)
+    config = get_config(ctx.guild.id)
+    staff_role = ctx.guild.get_role(config["staff_role_id"]) if config and config["staff_role_id"] else None
+    if not (ctx.author.guild_permissions.manage_channels or (staff_role and staff_role in ctx.author.roles)):
+        await ctx.send("Only staff can claim tickets.")
         return
-    claim_ticket(interaction.channel.id, interaction.user.id)
-    await interaction.response.send_message(f"This ticket was claimed by {interaction.user.mention}.")
-    await send_ticket_log(interaction.guild, "Ticket claimed", interaction.user, interaction.channel, discord.Color.gold())
+    claim_ticket(ctx.channel.id, ctx.author.id)
+    await ctx.send(f"This ticket was claimed by {ctx.author.mention}.")
+    await send_ticket_log(ctx.guild, "Ticket claimed", ctx.author, ctx.channel, discord.Color.gold())
 
 
-@bot.tree.command(name="ticketclose", description="Close the current ticket and save its transcript")
-@discord.app_commands.checks.has_permissions(manage_channels=True)
-async def ticketclose(interaction: discord.Interaction) -> None:
-    if interaction.guild is None or not isinstance(interaction.channel, discord.TextChannel) or get_ticket(interaction.channel.id) is None:
-        await interaction.response.send_message("This channel is not a tracked ticket.", ephemeral=True)
+@bot.command(name="ticketclose")
+@commands.guild_only()
+async def ticketclose(ctx: commands.Context) -> None:
+    if ctx.guild is None or not isinstance(ctx.channel, discord.TextChannel) or get_ticket(ctx.channel.id) is None:
+        await ctx.send("This channel is not a tracked ticket.")
         return
-    transcript = await build_transcript(interaction.channel)
-    close_ticket(interaction.channel.id)
-    await interaction.response.send_message("Closing ticket and saving transcript...", ephemeral=True)
-    await send_ticket_log(interaction.guild, "Ticket closed", interaction.user, interaction.channel, discord.Color.red(), transcript)
-    await interaction.channel.delete(reason=f"Ticket closed by {interaction.user}")
+    transcript = await build_transcript(ctx.channel)
+    close_ticket(ctx.channel.id)
+    await ctx.send("Closing ticket and saving transcript...")
+    await send_ticket_log(ctx.guild, "Ticket closed", ctx.author, ctx.channel, discord.Color.red(), transcript)
+    await ctx.channel.delete(reason=f"Ticket closed by {ctx.author}")
+
+
+@bot.event
+async def on_command_error(ctx: commands.Context, error: commands.CommandError) -> None:
+    if isinstance(error, commands.CheckFailure):
+        if ctx.author.id != OWNER_ID:
+            await ctx.send("Only the bot owner can use these commands.")
+        return
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"Missing argument. Example: `{PREFIX}rolelog #role-logs`")
+        return
+    if isinstance(error, commands.BadArgument):
+        await ctx.send("Mention a valid channel or role and try again.")
+        return
+    log.exception("Command failed", exc_info=error)
 
 
 app = Flask(__name__)

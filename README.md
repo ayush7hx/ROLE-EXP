@@ -24,14 +24,15 @@ python bot.py
 
 ## Commands
 
-- `/ticketconfig ticket_logs:#ticket-logs role_logs:#role-logs staff_role:@Staff` creates/configures the ticket category and log destinations.
-- `/rolelog set channel:#role-logs` configures only the manual role add/remove log channel.
-- `/rolelog disable` turns off manual role add/remove logs.
-- `/ticketpanel` posts the ticket embed panel in the current channel.
-- `/ticketclose` closes the current ticket (staff fallback).
-- `/ticketclaim` claims the current ticket; the ticket button is also available.
+- `*ticketconfig #ticket-logs #role-logs @Staff` creates/configures the ticket category and log destinations.
+- `*rolelog #role-logs` configures only the manual role add/remove log channel.
+- `*rolelogoff` turns off manual role add/remove logs.
+- `*ticketconfig #ticket-logs #role-logs @Staff` configures the ticket system.
+- `*ticketpanel` posts the ticket embed panel in the current channel.
+- `*ticketclose` closes the current ticket (owner fallback).
+- `*ticketclaim` claims the current ticket; the ticket button is also available.
 
-Ticket members can use the **Close** button. Staff can use **Claim** and **Close**. A transcript file is sent to the configured ticket log channel before the ticket channel is deleted. Slash commands are synced globally when the bot starts.
+Only owner ID `1255716509443948648` can use bot commands. Ticket members can use the **Close** button. Staff can use **Claim** and **Close**. A transcript file is sent to the configured ticket log channel before the ticket channel is deleted.
 
 ## Render
 
