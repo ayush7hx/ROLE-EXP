@@ -269,7 +269,7 @@ class RoleExp(commands.Bot):
         if not added and not removed:
             return
         actor = await find_role_change_actor(after.guild, after.id)
-        if actor is None or actor.bot:
+        if actor is None or actor.bot or actor.id == after.id:
             return
         config = get_config(after.guild.id)
         log_channel = channel_from_config(after.guild, config["role_log_channel_id"] if config else None)
