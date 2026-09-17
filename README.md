@@ -25,20 +25,13 @@ python bot.py
 ## Commands
 
 - `*ticket setup buttons #panel-channel @Staff` creates a button ticket panel and private `Tickets` category. Use `dropdown` instead of `buttons` for a dropdown panel.
+- `*ticket customize` opens a form for custom title, description, banner, thumbnail, and footer, then updates the configured panel.
 - `*ticket log #ticket-logs` configures the ticket transcript log channel.
 - `*ticket claim` and `*ticket close` are also available inside an open ticket; the ticket buttons provide claim, lock, unlock, and close actions.
 - `*rolelog #role-logs` configures only the manual role add/remove log channel.
 - `*rolelogoff` turns off manual role add/remove logs.
 
 Only owner ID `1255716509443948648` can use bot commands. Ticket members can use the **Close** button. Staff can use **Claim** and **Close**. A transcript file is sent to the configured ticket log channel before the ticket channel is deleted.
-
-Customize the panel when posting it. Use URLs directly:
-
-```text
-*ticketpanel <logo-url> <banner-url>
-```
-
-You can also attach one image for the thumbnail, or two images in order: first attachment is the logo thumbnail and second attachment is the banner. Then run `*ticketpanel` again to post the custom panel.
 
 ## Render
 

@@ -183,6 +183,42 @@ class TicketSystem(commands.Cog):
             self.store.run("UPDATE ticket_config SET logging_channel_id = ? WHERE guild_id = ?", (channel.id, ctx.guild.id))
             await ctx.send(f"Ticket logs will be sent to {channel.mention}.")
 
+    @ticket.command(name="customize")
+    @commands.has_permissions(manage_guild=True)
+    async def ticket_customize(self, ctx: commands.Context) -> None:
+        config = self.store.one("SELECT * FROM ticket_config WHERE guild_id = ?", (ctx.guild.id if ctx.guild else 0,))
+        if config is None:
+            await ctx.send("Run `*ticket setup buttons #panel-channel @Staff` first.")
+            return
+        await ctx.send("Click below to customize the ticket panel.", view=CustomPanelView(self))
+
+    async def update_panel(self, interaction: discord.Interaction, values: dict[str, str]) -> None:
+        if interaction.guild is None:
+            return
+        config = self.store.one("SELECT * FROM ticket_config WHERE guild_id = ?", (interaction.guild.id,))
+        if config is None:
+            await interaction.response.send_message("Ticket system is not configured.", ephemeral=True)
+            return
+        embed = discord.Embed(title=values["title"], description=values["description"], color=EMBED_COLOR)
+        if values["image_url"]:
+            embed.set_image(url=values["image_url"])
+        if values["thumbnail_url"]:
+            embed.set_thumbnail(url=values["thumbnail_url"])
+        if values["footer"]:
+            embed.set_footer(text=values["footer"])
+        panel_channel = interaction.guild.get_channel(config["panel_channel_id"])
+        if not isinstance(panel_channel, discord.TextChannel):
+            await interaction.response.send_message("The configured panel channel no longer exists.", ephemeral=True)
+            return
+        view = TicketPanel(self, style=config["panel_type"])
+        try:
+            panel_message = await panel_channel.fetch_message(config["panel_message_id"])
+            await panel_message.edit(embed=embed, view=view)
+        except discord.HTTPException:
+            panel_message = await panel_channel.send(embed=embed, view=view)
+            self.store.run("UPDATE ticket_config SET panel_message_id = ? WHERE guild_id = ?", (panel_message.id, interaction.guild.id))
+        await interaction.response.send_message("Ticket panel design updated.", ephemeral=True)
+
     @ticket.command(name="close")
     @commands.has_permissions(manage_channels=True)
     async def ticket_close(self, ctx: commands.Context) -> None:
@@ -281,3 +317,37 @@ async def setup(bot: commands.Bot) -> None:
     cog = TicketSystem(bot)
     await bot.add_cog(cog)
     bot.loop.create_task(cog.load_views())
+
+
+class CustomPanelView(discord.ui.View):
+    def __init__(self, system: TicketSystem) -> None:
+        super().__init__(timeout=300)
+        self.system = system
+
+    @discord.ui.button(label="Customize Ticket Panel", style=discord.ButtonStyle.primary)
+    async def customize(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(CustomPanelModal(self.system))
+
+
+class CustomPanelModal(discord.ui.Modal, title="Customize Ticket Panel"):
+    panel_title = discord.ui.TextInput(label="Title", placeholder="Support Tickets", max_length=256)
+    panel_description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph, placeholder="Choose a category below to open a private support ticket.", max_length=4000)
+    image_url = discord.ui.TextInput(label="Banner image URL", required=False, placeholder="https://example.com/banner.png", max_length=1000)
+    thumbnail_url = discord.ui.TextInput(label="Thumbnail URL", required=False, placeholder="https://example.com/logo.png", max_length=1000)
+    footer = discord.ui.TextInput(label="Footer", required=False, placeholder="Our support team will help you shortly.", max_length=2048)
+
+    def __init__(self, system: TicketSystem) -> None:
+        super().__init__()
+        self.system = system
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.system.update_panel(
+            interaction,
+            {
+                "title": str(self.panel_title),
+                "description": str(self.panel_description),
+                "image_url": str(self.image_url).strip(),
+                "thumbnail_url": str(self.thumbnail_url).strip(),
+                "footer": str(self.footer).strip(),
+            },
+        )
