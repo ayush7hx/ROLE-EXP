@@ -2,7 +2,7 @@
 
 A focused Discord bot with two features:
 
-1. Advanced private ticket system with embeds, a dedicated `Tickets` category, staff access, claim/close controls, and transcript logs.
+1. Advanced private ticket system with button/dropdown panels, private categories, staff access, claim/lock/unlock/close controls, ticket limits, and transcript logs.
 2. Role audit logging: only a verified human manually adding or removing a role from another human member is logged with the target member, role, executor from Discord Audit Log, IDs, and UTC timestamp. Bot actions, autorole, onboarding, and unknown/system audit events are ignored.
 
 ## Discord setup
@@ -24,14 +24,11 @@ python bot.py
 
 ## Commands
 
-- `*ticketconfig #ticket-logs @Staff` creates/configures the ticket category and ticket log channel.
+- `*ticket setup buttons #panel-channel @Staff` creates a button ticket panel and private `Tickets` category. Use `dropdown` instead of `buttons` for a dropdown panel.
+- `*ticket log #ticket-logs` configures the ticket transcript log channel.
+- `*ticket claim` and `*ticket close` are also available inside an open ticket; the ticket buttons provide claim, lock, unlock, and close actions.
 - `*rolelog #role-logs` configures only the manual role add/remove log channel.
 - `*rolelogoff` turns off manual role add/remove logs.
-- `*ticketconfig #ticket-logs @Staff` configures the ticket system.
-- `*ticketpanel` posts the ticket embed panel in the current channel.
-- `*ticketcustomize` opens a Discord form for title, description, image URL, thumbnail URL, and footer, then posts the finished panel.
-- `*ticketclose` closes the current ticket (owner fallback).
-- `*ticketclaim` claims the current ticket; the ticket button is also available.
 
 Only owner ID `1255716509443948648` can use bot commands. Ticket members can use the **Close** button. Staff can use **Claim** and **Close**. A transcript file is sent to the configured ticket log channel before the ticket channel is deleted.
 
