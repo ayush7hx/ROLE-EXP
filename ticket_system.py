@@ -33,7 +33,11 @@ class TicketStore:
                 description TEXT NOT NULL,
                 form_type TEXT NOT NULL,
                 staff_role_id INTEGER NOT NULL,
-                category_id INTEGER NOT NULL
+                category_id INTEGER NOT NULL,
+                logging_channel_id INTEGER,
+                image_url TEXT,
+                thumbnail_url TEXT,
+                footer TEXT
             );
             CREATE TABLE IF NOT EXISTS tickets (
                 channel_id INTEGER PRIMARY KEY,
@@ -60,6 +64,17 @@ class TicketStore:
         for name, definition in (("panel_id", "INTEGER NOT NULL DEFAULT 0"), ("staff_role_id", "INTEGER NOT NULL DEFAULT 0")):
             if name not in columns:
                 self.connection.execute(f"ALTER TABLE tickets ADD COLUMN {name} {definition}")
+        panel_columns = {row[1] for row in self.connection.execute("PRAGMA table_info(ticket_panels)")}
+        for name, definition in (("logging_channel_id", "INTEGER"), ("image_url", "TEXT"), ("thumbnail_url", "TEXT"), ("footer", "TEXT")):
+            if name not in panel_columns:
+                self.connection.execute(f"ALTER TABLE ticket_panels ADD COLUMN {name} {definition}")
+        old_config = self.connection.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ticket_config'").fetchone()
+        if old_config and self.connection.execute("SELECT COUNT(*) FROM ticket_panels").fetchone()[0] == 0:
+            for row in self.connection.execute("SELECT * FROM ticket_config").fetchall():
+                self.connection.execute(
+                    "INSERT INTO ticket_panels (guild_id, panel_channel_id, panel_message_id, title, description, form_type, staff_role_id, category_id, logging_channel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (row["guild_id"], row["panel_channel_id"], row["panel_message_id"], "Support Tickets", "Complete the form before a ticket is created.", "support", row["staff_role_id"], row["category_id"], row["logging_channel_id"]),
+                )
         self.connection.commit()
 
     def one(self, query: str, values: tuple = ()) -> sqlite3.Row | None:
@@ -128,6 +143,28 @@ class TicketActions(discord.ui.View):
         self.system.store.run("UPDATE tickets SET claimed_by_id = ? WHERE channel_id = ?", (interaction.user.id, self.channel_id))
         await interaction.response.send_message(f"Ticket claimed by {interaction.user.mention}.")
 
+    @discord.ui.button(label="Lock", style=discord.ButtonStyle.secondary, custom_id="ticket:lock")
+    async def lock(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not isinstance(interaction.user, discord.Member) or not self.system.is_staff(interaction.user, interaction.guild.id):
+            return await interaction.response.send_message("Only ticket staff can lock tickets.", ephemeral=True)
+        ticket = self.system.store.one("SELECT creator_id FROM tickets WHERE channel_id = ?", (self.channel_id,))
+        member = interaction.guild.get_member(ticket["creator_id"]) if ticket else None
+        if member:
+            await interaction.channel.set_permissions(member, send_messages=False)
+        self.system.store.run("UPDATE tickets SET is_locked = 1 WHERE channel_id = ?", (self.channel_id,))
+        await interaction.response.send_message("Ticket locked.")
+
+    @discord.ui.button(label="Unlock", style=discord.ButtonStyle.secondary, custom_id="ticket:unlock")
+    async def unlock(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not isinstance(interaction.user, discord.Member) or not self.system.is_staff(interaction.user, interaction.guild.id):
+            return await interaction.response.send_message("Only ticket staff can unlock tickets.", ephemeral=True)
+        ticket = self.system.store.one("SELECT creator_id FROM tickets WHERE channel_id = ?", (self.channel_id,))
+        member = interaction.guild.get_member(ticket["creator_id"]) if ticket else None
+        if member:
+            await interaction.channel.set_permissions(member, send_messages=True)
+        self.system.store.run("UPDATE tickets SET is_locked = 0 WHERE channel_id = ?", (self.channel_id,))
+        await interaction.response.send_message("Ticket unlocked.")
+
     @discord.ui.button(label="Close", style=discord.ButtonStyle.danger, custom_id="ticket:close")
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         ticket = self.system.store.one("SELECT creator_id FROM tickets WHERE channel_id = ? AND closed_at IS NULL", (self.channel_id,))
@@ -168,7 +205,34 @@ class TicketSystem(commands.Cog):
         message = await channel.send(embed=embed, view=TicketPanel(self, panel_id))
         self.store.run("UPDATE ticket_panels SET panel_message_id = ? WHERE panel_id = ?", (message.id, panel_id))
         self.bot.add_view(TicketPanel(self, panel_id), message_id=message.id)
-        await ctx.send(f"{form_type.title()} panel created in {channel.mention}. Tickets will open under {category.mention}.")
+        await ctx.send(f"{form_type.title()} panel `{panel_id}` created in {channel.mention}. Tickets will open under {category.mention}.")
+
+    async def update_panel(self, interaction: discord.Interaction, panel_id: int, values: dict[str, str]) -> None:
+        panel = self.store.one("SELECT * FROM ticket_panels WHERE panel_id = ? AND guild_id = ?", (panel_id, interaction.guild.id if interaction.guild else 0))
+        if panel is None:
+            return await interaction.response.send_message("Panel ID not found in this server.", ephemeral=True)
+        panel_channel = interaction.guild.get_channel(panel["panel_channel_id"]) if interaction.guild else None
+        if not isinstance(panel_channel, discord.TextChannel):
+            return await interaction.response.send_message("The panel channel no longer exists.", ephemeral=True)
+        embed = discord.Embed(title=values["title"], description=values["description"], color=discord.Color.red())
+        if values["image_url"]:
+            embed.set_image(url=values["image_url"])
+        if values["thumbnail_url"]:
+            embed.set_thumbnail(url=values["thumbnail_url"])
+        if values["footer"]:
+            embed.set_footer(text=values["footer"])
+        try:
+            message = await panel_channel.fetch_message(panel["panel_message_id"])
+            await message.edit(embed=embed, view=TicketPanel(self, panel_id))
+        except discord.HTTPException:
+            message = await panel_channel.send(embed=embed, view=TicketPanel(self, panel_id))
+            self.store.run("UPDATE ticket_panels SET panel_message_id = ? WHERE panel_id = ?", (message.id, panel_id))
+        self.store.run(
+            "UPDATE ticket_panels SET title = ?, description = ?, image_url = ?, thumbnail_url = ?, footer = ? WHERE panel_id = ?",
+            (values["title"], values["description"], values["image_url"], values["thumbnail_url"], values["footer"], panel_id),
+        )
+        self.bot.add_view(TicketPanel(self, panel_id), message_id=message.id)
+        await interaction.response.send_message("Ticket panel customized.", ephemeral=True)
 
     async def create_ticket(self, interaction: discord.Interaction, panel: sqlite3.Row, first: str, second: str, third: str) -> None:
         guild = interaction.guild
@@ -202,10 +266,29 @@ class TicketSystem(commands.Cog):
         ticket = self.store.one("SELECT * FROM tickets WHERE channel_id = ? AND closed_at IS NULL", (channel.id,))
         if not ticket:
             return await source.followup.send("This is not an open ticket.", ephemeral=True)
+        transcript = await self.transcript(channel)
         self.store.run("UPDATE tickets SET closed_at = ?, closed_by_id = ? WHERE channel_id = ?", (datetime.now(timezone.utc).isoformat(), actor.id, channel.id))
         self.store.run("UPDATE ticket_counts SET open_count = MAX(0, open_count - 1) WHERE guild_id = ? AND user_id = ?", (source.guild.id, ticket["creator_id"]))
-        await source.followup.send("Ticket closed.", ephemeral=True)
+        await self.log(source.guild, "Ticket closed", actor, channel, transcript, ticket["panel_id"])
+        await source.followup.send("Ticket closed and transcript saved.", ephemeral=True)
         await channel.delete(reason=f"Ticket closed by {actor}")
+
+    async def transcript(self, channel: discord.TextChannel) -> discord.File:
+        lines = [f"Transcript: #{channel.name}", ""]
+        async for message in channel.history(limit=None, oldest_first=True):
+            content = message.clean_content or "[embed/attachment]"
+            lines.append(f"[{message.created_at.astimezone(timezone.utc):%Y-%m-%d %H:%M:%S UTC}] {message.author} ({message.author.id}): {content}")
+            lines.extend(f"  Attachment: {attachment.url}" for attachment in message.attachments)
+        return discord.File(io.BytesIO("\n".join(lines).encode("utf-8")), filename=f"{channel.name}-transcript.txt")
+
+    async def log(self, guild: discord.Guild, title: str, actor: discord.Member | discord.User, channel: discord.abc.GuildChannel, transcript: discord.File | None, panel_id: int) -> None:
+        panel = self.store.one("SELECT logging_channel_id FROM ticket_panels WHERE panel_id = ?", (panel_id,))
+        log_channel = guild.get_channel(panel["logging_channel_id"]) if panel and panel["logging_channel_id"] else None
+        if isinstance(log_channel, discord.TextChannel):
+            embed = discord.Embed(title=title, color=discord.Color.red(), timestamp=datetime.now(timezone.utc))
+            embed.add_field(name="Actor", value=f"{actor.mention} (`{actor.id}`)")
+            embed.add_field(name="Channel", value=f"`{channel.name}` (`{channel.id}`)")
+            await log_channel.send(embed=embed, file=transcript) if transcript else await log_channel.send(embed=embed)
 
     @commands.hybrid_group(name="ticket", description="Manage the ticket system.")
     @commands.guild_only()
@@ -218,8 +301,60 @@ class TicketSystem(commands.Cog):
     async def ticket_setup(self, ctx: commands.Context, name: str, channel: discord.TextChannel, staff_role: discord.Role, category: discord.CategoryChannel, form_type: str = "support") -> None:
         await self.setup_panel(ctx, name, channel, staff_role, category, form_type.lower())
 
+    @ticket.command(name="log")
+    @commands.has_permissions(manage_guild=True)
+    async def ticket_log(self, ctx: commands.Context, panel_id: int, channel: discord.TextChannel) -> None:
+        if self.store.one("SELECT panel_id FROM ticket_panels WHERE panel_id = ? AND guild_id = ?", (panel_id, ctx.guild.id)) is None:
+            return await ctx.send("Panel ID not found in this server.")
+        self.store.run("UPDATE ticket_panels SET logging_channel_id = ? WHERE panel_id = ?", (channel.id, panel_id))
+        await ctx.send(f"Ticket logs for panel `{panel_id}` will be sent to {channel.mention}.")
+
+    @ticket.command(name="customize")
+    @commands.has_permissions(manage_guild=True)
+    async def ticket_customize(self, ctx: commands.Context, panel_id: int) -> None:
+        if self.store.one("SELECT panel_id FROM ticket_panels WHERE panel_id = ? AND guild_id = ?", (panel_id, ctx.guild.id)) is None:
+            return await ctx.send("Panel ID not found in this server.")
+        await ctx.send(f"Customize panel `{panel_id}`:", view=CustomPanelView(self, panel_id))
+
 
 async def setup(bot: commands.Bot) -> None:
     cog = TicketSystem(bot)
     await bot.add_cog(cog)
     bot.loop.create_task(cog.load_views())
+
+
+class CustomPanelView(discord.ui.View):
+    def __init__(self, system: TicketSystem, panel_id: int) -> None:
+        super().__init__(timeout=300)
+        self.system = system
+        self.panel_id = panel_id
+
+    @discord.ui.button(label="Customize Ticket Panel", style=discord.ButtonStyle.primary)
+    async def customize(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(CustomPanelModal(self.system, self.panel_id))
+
+
+class CustomPanelModal(discord.ui.Modal, title="Customize Ticket Panel"):
+    panel_title = discord.ui.TextInput(label="Title", placeholder="Support Tickets", max_length=256)
+    panel_description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph, placeholder="Complete the form before a ticket is created.", max_length=4000)
+    image_url = discord.ui.TextInput(label="Banner image URL", required=False, max_length=1000)
+    thumbnail_url = discord.ui.TextInput(label="Thumbnail URL", required=False, max_length=1000)
+    footer = discord.ui.TextInput(label="Footer", required=False, max_length=2048)
+
+    def __init__(self, system: TicketSystem, panel_id: int) -> None:
+        super().__init__()
+        self.system = system
+        self.panel_id = panel_id
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.system.update_panel(
+            interaction,
+            self.panel_id,
+            {
+                "title": str(self.panel_title),
+                "description": str(self.panel_description),
+                "image_url": str(self.image_url).strip(),
+                "thumbnail_url": str(self.thumbnail_url).strip(),
+                "footer": str(self.footer).strip(),
+            },
+        )
