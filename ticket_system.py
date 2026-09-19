@@ -98,20 +98,31 @@ class TicketModal(discord.ui.Modal):
         self.panel = panel
         super().__init__(title="Guild Application" if panel["form_type"] == "application" else "Support Ticket")
         if panel["form_type"] == "application":
-            self.first = discord.ui.TextInput(label="Guild name", max_length=100)
-            self.second = discord.ui.TextInput(label="Your in-game name", max_length=100)
-            self.third = discord.ui.TextInput(label="Why should we accept you?", style=discord.TextStyle.paragraph, max_length=1000)
+            self.first = discord.ui.TextInput(label="Game UID", placeholder="Enter your in-game UID", max_length=100)
+            self.second = discord.ui.TextInput(label="Rank", placeholder="Enter your current rank", max_length=100)
+            self.third = discord.ui.TextInput(label="Age", placeholder="Enter your age", max_length=3)
+            self.fourth = discord.ui.TextInput(label="Game name", placeholder="Enter your in-game name", max_length=100)
+            self.fifth = discord.ui.TextInput(label="Why join our guild?", style=discord.TextStyle.paragraph, max_length=1000)
         else:
             self.first = discord.ui.TextInput(label="What is your issue?", placeholder="Explain your query in detail...", style=discord.TextStyle.paragraph, max_length=2000)
             self.second = discord.ui.TextInput(label="Extra details", required=False, max_length=1000)
             self.third = None
+            self.fourth = None
+            self.fifth = None
         self.add_item(self.first)
         self.add_item(self.second)
         if self.third:
             self.add_item(self.third)
+        if self.fourth:
+            self.add_item(self.fourth)
+        if self.fifth:
+            self.add_item(self.fifth)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await self.system.create_ticket(interaction, self.panel, self.first.value, self.second.value, self.third.value if self.third else "")
+        answers = [self.first.value, self.second.value, self.third.value if self.third else ""]
+        if self.fourth:
+            answers.extend([self.fourth.value, self.fifth.value])
+        await self.system.create_ticket(interaction, self.panel, answers)
 
 
 class TicketPanel(discord.ui.View):
@@ -208,7 +219,10 @@ class TicketSystem(commands.Cog):
         await ctx.send(f"{form_type.title()} panel `{panel_id}` created in {channel.mention}. Tickets will open under {category.mention}.")
 
     async def update_panel(self, interaction: discord.Interaction, panel_id: int, values: dict[str, str]) -> None:
-        panel = self.store.one("SELECT * FROM ticket_panels WHERE panel_id = ? AND guild_id = ?", (panel_id, interaction.guild.id if interaction.guild else 0))
+        panel = self.store.one(
+            "SELECT * FROM ticket_panels WHERE guild_id = ? AND (panel_id = ? OR panel_message_id = ? OR panel_channel_id = ?)",
+            (interaction.guild.id if interaction.guild else 0, panel_id, panel_id, panel_id),
+        )
         if panel is None:
             return await interaction.response.send_message("Panel ID not found in this server.", ephemeral=True)
         panel_channel = interaction.guild.get_channel(panel["panel_channel_id"]) if interaction.guild else None
@@ -234,7 +248,7 @@ class TicketSystem(commands.Cog):
         self.bot.add_view(TicketPanel(self, panel_id), message_id=message.id)
         await interaction.response.send_message("Ticket panel customized.", ephemeral=True)
 
-    async def create_ticket(self, interaction: discord.Interaction, panel: sqlite3.Row, first: str, second: str, third: str) -> None:
+    async def create_ticket(self, interaction: discord.Interaction, panel: sqlite3.Row, answers: list[str]) -> None:
         guild = interaction.guild
         if guild is None or not isinstance(interaction.user, discord.Member):
             return await interaction.response.send_message("Tickets can only be opened in a server.", ephemeral=True)
@@ -251,11 +265,9 @@ class TicketSystem(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True), staff_role: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True), guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)}
         channel = await category.create_text_channel(safe_name(f"{panel['form_type']}-{interaction.user.name}"), overwrites=overwrites)
-        labels = ["Guild name", "Your in-game name", "Why should we accept you?"] if panel["form_type"] == "application" else ["What is your issue?", "Extra details"]
-        answers = [f"**{labels[0]}**\n{first}", f"**{labels[1]}**\n{second}"]
-        if third:
-            answers.append(f"**{labels[2]}**\n{third}")
-        embed = discord.Embed(title=panel["title"], description="\n\n".join(answers), color=discord.Color.red())
+        labels = ["Game UID", "Rank", "Age", "Game name", "Why join our guild?"] if panel["form_type"] == "application" else ["What is your issue?", "Extra details"]
+        answer_lines = [f"**{label}**\n{answer}" for label, answer in zip(labels, answers) if answer]
+        embed = discord.Embed(title=panel["title"], description="\n\n".join(answer_lines), color=discord.Color.red())
         message = await channel.send(content=f"{interaction.user.mention} {staff_role.mention}", embed=embed, view=TicketActions(self, channel.id))
         self.store.run("INSERT INTO tickets (channel_id, message_id, guild_id, creator_id, panel_id, staff_role_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (channel.id, message.id, guild.id, interaction.user.id, panel["panel_id"], staff_role.id, datetime.now(timezone.utc).isoformat()))
         self.store.run("INSERT INTO ticket_counts (guild_id, user_id, open_count) VALUES (?, ?, 1) ON CONFLICT(guild_id, user_id) DO UPDATE SET open_count = open_count + 1", (guild.id, interaction.user.id))
@@ -309,12 +321,31 @@ class TicketSystem(commands.Cog):
         self.store.run("UPDATE ticket_panels SET logging_channel_id = ? WHERE panel_id = ?", (channel.id, panel_id))
         await ctx.send(f"Ticket logs for panel `{panel_id}` will be sent to {channel.mention}.")
 
+    @ticket.command(name="form")
+    @commands.has_permissions(manage_guild=True)
+    async def ticket_form(self, ctx: commands.Context, panel_id: int, form_type: str) -> None:
+        form_type = form_type.lower()
+        if form_type not in {"support", "application"}:
+            return await ctx.send("Form type must be `support` or `application`.")
+        panel = self.store.one(
+            "SELECT panel_id FROM ticket_panels WHERE guild_id = ? AND (panel_id = ? OR panel_message_id = ? OR panel_channel_id = ?)",
+            (ctx.guild.id, panel_id, panel_id, panel_id),
+        )
+        if panel is None:
+            return await ctx.send("Panel ID not found in this server.")
+        self.store.run("UPDATE ticket_panels SET form_type = ? WHERE panel_id = ?", (form_type, panel["panel_id"]))
+        await ctx.send(f"Panel `{panel['panel_id']}` is now configured as `{form_type}`.")
+
     @ticket.command(name="customize")
     @commands.has_permissions(manage_guild=True)
     async def ticket_customize(self, ctx: commands.Context, panel_id: int) -> None:
-        if self.store.one("SELECT panel_id FROM ticket_panels WHERE panel_id = ? AND guild_id = ?", (panel_id, ctx.guild.id)) is None:
+        panel = self.store.one(
+            "SELECT panel_id FROM ticket_panels WHERE guild_id = ? AND (panel_id = ? OR panel_message_id = ? OR panel_channel_id = ?)",
+            (ctx.guild.id, panel_id, panel_id, panel_id),
+        )
+        if panel is None:
             return await ctx.send("Panel ID not found in this server.")
-        await ctx.send(f"Customize panel `{panel_id}`:", view=CustomPanelView(self, panel_id))
+        await ctx.send(f"Customize panel `{panel['panel_id']}`:", view=CustomPanelView(self, panel["panel_id"]))
 
 
 async def setup(bot: commands.Bot) -> None:

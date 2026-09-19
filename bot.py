@@ -158,7 +158,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError) 
             await ctx.send("Only the bot owner can use these commands.")
         return
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"Missing argument. Example: `{PREFIX}ticket setup buttons #panel @Staff`")
+        await ctx.send(f"Missing argument. Example: `{PREFIX}ticket setup Support #panel @Staff #tickets support`")
         return
     if isinstance(error, commands.BadArgument):
         await ctx.send("Mention a valid channel or role and try again.")
