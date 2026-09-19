@@ -26,13 +26,11 @@ python bot.py
 
 - `*ticket setup Support #panel-channel @Staff #support-tickets support` creates a support panel. Run it again with a different name, category, staff role, and `application` form for guild applications.
 - Clicking **Open Ticket** shows a required modal first. No channel is created until the user submits the issue/application details.
-- `*ticket customize` opens a form for custom title, description, banner, thumbnail, and footer, then updates the configured panel.
-- `*ticket log #ticket-logs` configures the ticket transcript log channel.
-- `*ticket claim` and `*ticket close` are also available inside an open ticket; the ticket buttons provide claim, lock, unlock, and close actions.
+- `*ticket claim` and `*ticket close` are also available inside an open ticket; the ticket buttons provide claim and close actions.
 - `*rolelog #role-logs` configures only the manual role add/remove log channel.
 - `*rolelogoff` turns off manual role add/remove logs.
 
-Only owner ID `1255716509443948648` can use bot commands. Ticket members can use the **Close** button. Staff can use **Claim** and **Close**. A transcript file is sent to the configured ticket log channel before the ticket channel is deleted.
+Only owner ID `1255716509443948648` can use bot commands. Ticket members can use the **Close** button. Staff can use **Claim** and **Close**.
 
 ## Render
 
