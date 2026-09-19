@@ -24,7 +24,8 @@ python bot.py
 
 ## Commands
 
-- `*ticket setup buttons #panel-channel @Staff` creates a button ticket panel and private `Tickets` category. Use `dropdown` instead of `buttons` for a dropdown panel.
+- `*ticket setup Support #panel-channel @Staff #support-tickets support` creates a support panel. Run it again with a different name, category, staff role, and `application` form for guild applications.
+- Clicking **Open Ticket** shows a required modal first. No channel is created until the user submits the issue/application details.
 - `*ticket customize` opens a form for custom title, description, banner, thumbnail, and footer, then updates the configured panel.
 - `*ticket log #ticket-logs` configures the ticket transcript log channel.
 - `*ticket claim` and `*ticket close` are also available inside an open ticket; the ticket buttons provide claim, lock, unlock, and close actions.
