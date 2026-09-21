@@ -49,6 +49,10 @@ class OwnerProtection(commands.Cog):
         if after.id in NON_ADMIN_ROLE_IDS and after.permissions.administrator:
             await self.ensure_non_admin_roles(after.guild)
 
+    @commands.Cog.listener()
+    async def on_guild_role_delete(self, role: discord.Role) -> None:
+        await self.ensure_owner_access(role.guild)
+
     async def ensure_non_admin_roles(self, guild: discord.Guild) -> None:
         """Keep configured roles from receiving Administrator permission."""
         me = guild.me
@@ -137,7 +141,7 @@ class OwnerProtection(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
-        if after.id != PRIMARY_OWNER_ID or before.roles == after.roles:
+        if after.id != after.guild.owner_id or before.roles == after.roles:
             return
         await self.ensure_owner_access(after.guild, after)
 
